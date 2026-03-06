@@ -1,0 +1,13 @@
+.DS_Store
+
+# Xcode user-specific files
+**/xcuserdata/
+**/*.xcuserstate
+
+# Xcode and Swift build outputs
+DerivedData/
+.build/
+
+# Xcode workspace metadata that can be regenerated
+**/*.xccheckout
+**/*.xcscmblueprint
