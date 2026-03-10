@@ -9,9 +9,15 @@ import SwiftUI
 
 @main
 struct FrogTrayApp: App {
+    @StateObject private var metricsMonitor = SystemMetricsMonitor()
+
     var body: some Scene {
-        WindowGroup {
-            ContentView()
+        MenuBarExtra {
+            ContentView(monitor: metricsMonitor)
+        } label: {
+            Text(metricsMonitor.snapshot.menuBarTitle)
+                .monospacedDigit()
         }
+        .menuBarExtraStyle(.window)
     }
 }
