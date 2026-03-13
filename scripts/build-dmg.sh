@@ -6,7 +6,6 @@ APP_NAME="FrogTray"
 SCHEME="FrogTray"
 PROJECT_PATH="FrogTray/FrogTray.xcodeproj"
 CONFIGURATION="Release"
-RUN_AFTER_DEPLOY=0
 SKIP_BUILD=0
 OPEN_DMG=0
 
@@ -15,22 +14,20 @@ usage() {
 사용법:
   ./scripts/build-dmg.sh [옵션]
 
-Release 빌드 후 배포용 DMG 파일을 생성합니다.
+Release clean 빌드 → DMG 생성 → ~/Applications 설치 → 앱 실행을 수행합니다.
 DMG에는 FrogTray.app과 /Applications 바로가기가 포함되어
-드래그 앤 드롭으로 설치할 수 있습니다.
+드래그 앤 드롭으로도 설치할 수 있습니다.
 
 옵션:
   --debug           Debug 구성으로 빌드
   --release         Release 구성으로 빌드 (기본값)
   --skip-build      빌드를 건너뛰고 기존 빌드 결과로 DMG 생성
-  --run             DMG 생성 후 앱을 ~/Applications에 설치하고 실행
   --open            DMG 생성 후 Finder에서 열기
   -h, --help        도움말 표시
 
 예시:
   ./scripts/build-dmg.sh
   ./scripts/build-dmg.sh --debug
-  ./scripts/build-dmg.sh --run
   ./scripts/build-dmg.sh --skip-build --open
 EOF
 }
@@ -47,10 +44,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-build)
       SKIP_BUILD=1
-      shift
-      ;;
-    --run)
-      RUN_AFTER_DEPLOY=1
       shift
       ;;
     --open)
@@ -216,28 +209,26 @@ rm -rf "${REPO_ROOT}/.build"
 DMG_SIZE=$(du -sh "${DMG_PATH}" | cut -f1)
 echo "  DMG 생성 완료: ${DMG_PATH} (${DMG_SIZE})"
 
-# ── 4. 후속 작업 ─────────────────────────────
+# ── 4. 종료 → 설치 → 실행 ─────────────────────
 
-echo "==> [4/4] 후속 작업"
+echo "==> [4/5] ~/Applications에 설치"
 
-if [[ ${RUN_AFTER_DEPLOY} -eq 1 ]]; then
-  DESTINATION_DIR="${HOME}/Applications"
-  DEPLOYED_APP_PATH="${DESTINATION_DIR}/${APP_NAME}.app"
-  mkdir -p "${DESTINATION_DIR}"
+DESTINATION_DIR="${HOME}/Applications"
+DEPLOYED_APP_PATH="${DESTINATION_DIR}/${APP_NAME}.app"
+mkdir -p "${DESTINATION_DIR}"
 
-  echo "  기존 실행 중인 ${APP_NAME} 종료 시도"
-  pkill -x "${APP_NAME}" 2>/dev/null || true
-  sleep 1
+echo "  기존 실행 중인 ${APP_NAME} 종료 시도"
+pkill -x "${APP_NAME}" 2>/dev/null || true
+sleep 1
 
-  echo "  DMG에서 ~/Applications에 설치"
-  DMG_MOUNT=$(hdiutil attach "${DMG_PATH}" -nobrowse -noverify -noautoopen | grep "/Volumes/" | awk '{print $NF}')
-  rm -rf "${DEPLOYED_APP_PATH}"
-  ditto "${DMG_MOUNT}/${APP_NAME}.app" "${DEPLOYED_APP_PATH}"
-  hdiutil detach "${DMG_MOUNT}" -quiet
+echo "  DMG에서 ~/Applications에 설치"
+DMG_MOUNT=$(hdiutil attach "${DMG_PATH}" -nobrowse -noverify -noautoopen | grep "/Volumes/" | awk '{print $NF}')
+rm -rf "${DEPLOYED_APP_PATH}"
+ditto "${DMG_MOUNT}/${APP_NAME}.app" "${DEPLOYED_APP_PATH}"
+hdiutil detach "${DMG_MOUNT}" -quiet
 
-  echo "  앱 실행"
-  open "${DEPLOYED_APP_PATH}"
-fi
+echo "==> [5/5] 앱 실행"
+open "${DEPLOYED_APP_PATH}"
 
 if [[ ${OPEN_DMG} -eq 1 ]]; then
   echo "  DMG를 Finder에서 열기"
