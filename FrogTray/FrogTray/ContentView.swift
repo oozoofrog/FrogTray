@@ -12,134 +12,428 @@ struct ContentView: View {
     @ObservedObject var monitor: SystemMetricsMonitor
     @ObservedObject var launchAtLoginManager: LaunchAtLoginManager
 
+    private var launchAtLoginBinding: Binding<Bool> {
+        Binding(
+            get: { launchAtLoginManager.isEnabled },
+            set: { launchAtLoginManager.setLaunchAtLoginEnabled($0) }
+        )
+    }
+
+    private var launchStatusTone: StatusTone {
+        if launchAtLoginManager.errorMessage != nil {
+            return .error
+        }
+
+        switch launchAtLoginManager.status {
+        case .enabled:
+            return .positive
+        case .requiresApproval:
+            return .warning
+        case .notRegistered, .notFound:
+            return .neutral
+        }
+    }
+
+    private var launchStatusMessage: String {
+        if let errorMessage = launchAtLoginManager.errorMessage {
+            return errorMessage
+        }
+
+        return launchAtLoginManager.statusMessage
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            header
+        VStack(alignment: .leading, spacing: 12) {
+            summaryCard
 
-            MetricRow(
+            SectionHeader(title: "실시간 상태", subtitle: "지금 가장 중요한 시스템 지표")
+
+            MetricCard(
                 title: "CPU",
+                subtitle: "전체 CPU 사용률",
+                details: monitor.snapshot.cpuUsage.statusDescription,
                 value: monitor.snapshot.cpuUsage,
-                details: "전체 CPU 사용률"
+                iconName: "cpu",
+                tone: UsageTone(value: monitor.snapshot.cpuUsage)
             )
 
-            MetricRow(
+            MetricCard(
                 title: "Memory",
+                subtitle: "메모리 점유",
+                details: "\(monitor.snapshot.memoryUsedText) / \(monitor.snapshot.memoryTotalText)",
                 value: monitor.snapshot.memoryUsage,
-                details: "\(monitor.snapshot.memoryUsedText) / \(monitor.snapshot.memoryTotalText)"
+                iconName: "memorychip",
+                tone: UsageTone(value: monitor.snapshot.memoryUsage)
             )
 
-            MetricRow(
+            MetricCard(
                 title: "Disk",
+                subtitle: "시스템 디스크 사용량",
+                details: "\(monitor.snapshot.diskUsedText) / \(monitor.snapshot.diskTotalText)",
                 value: monitor.snapshot.diskUsage,
-                details: "\(monitor.snapshot.diskUsedText) / \(monitor.snapshot.diskTotalText)"
+                iconName: "internaldrive",
+                tone: UsageTone(value: monitor.snapshot.diskUsage)
             )
 
-            Divider()
+            settingsCard
 
-            settingsSection
-
-            Divider()
-
-            HStack {
-                Button("새로고침") {
-                    monitor.refresh()
-                    launchAtLoginManager.refresh()
-                }
-
-                Spacer()
-
-                Button("종료") {
-                    NSApplication.shared.terminate(nil)
-                }
-                .keyboardShortcut("q")
-            }
+            actionRow
         }
         .padding(16)
-        .frame(width: 300)
+        .frame(width: 340)
         .onAppear {
             launchAtLoginManager.refresh()
         }
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Image(systemName: "chart.bar.xaxis")
-                    .imageScale(.large)
-                    .foregroundStyle(.tint)
-                Text("FrogTray")
-                    .font(.headline)
-                Spacer()
-            }
+    private var summaryCard: some View {
+        let dominantMetric = monitor.snapshot.dominantMetric
 
-            Text("마지막 갱신 \(monitor.snapshot.lastUpdated.formatted(date: .omitted, time: .standard))")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        return TrayCard(tint: dominantMetric.tone.color.opacity(0.15)) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(dominantMetric.tone.color.gradient)
+
+                        Image(systemName: "chart.bar.fill")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundStyle(.white)
+                    }
+                    .frame(width: 42, height: 42)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("FrogTray")
+                            .font(.headline)
+
+                        Text("\(dominantMetric.title) 사용량이 가장 높습니다.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    StatusBadge(title: dominantMetric.tone.badgeTitle, tone: dominantMetric.tone)
+                }
+
+                Text(monitor.snapshot.summaryLine)
+                    .font(.system(.body, design: .monospaced))
+                    .fontWeight(.semibold)
+                    .monospacedDigit()
+
+                HStack(spacing: 6) {
+                    Image(systemName: "clock")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Text("마지막 갱신 \(monitor.snapshot.lastUpdated.formatted(date: .omitted, time: .shortened))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
     }
 
-    private var settingsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("설정")
-                .font(.headline)
+    private var settingsCard: some View {
+        TrayCard {
+            VStack(alignment: .leading, spacing: 12) {
+                SectionHeader(title: "설정", subtitle: "앱 동작과 로그인 시 자동 실행")
 
-            Toggle(
-                "로그인 시 자동 실행",
-                isOn: Binding(
-                    get: { launchAtLoginManager.isEnabled },
-                    set: { launchAtLoginManager.setLaunchAtLoginEnabled($0) }
-                )
-            )
-            .disabled(launchAtLoginManager.isUpdating)
+                Toggle("로그인 시 자동 실행", isOn: launchAtLoginBinding)
+                    .toggleStyle(.switch)
+                    .disabled(launchAtLoginManager.isUpdating)
 
-            if launchAtLoginManager.isUpdating {
-                Text("설정을 적용하는 중입니다…")
+                if launchAtLoginManager.isUpdating {
+                    InlineStatusMessage(
+                        iconName: "arrow.triangle.2.circlepath",
+                        message: "설정을 적용하는 중입니다…",
+                        tone: .neutral
+                    )
+                } else {
+                    InlineStatusMessage(
+                        iconName: launchStatusTone.iconName,
+                        message: launchStatusMessage,
+                        tone: launchStatusTone
+                    )
+                }
+
+                if launchAtLoginManager.shouldShowSystemSettingsButton {
+                    Button {
+                        launchAtLoginManager.openSystemSettingsLoginItems()
+                    } label: {
+                        Label("시스템 설정 열기", systemImage: "gearshape")
+                    }
+                    .buttonStyle(.link)
+                    .controlSize(.small)
+                }
+            }
+        }
+    }
+
+    private var actionRow: some View {
+        HStack(spacing: 10) {
+            Button {
+                monitor.refresh()
+                launchAtLoginManager.refresh()
+            } label: {
+                Label("새로고침", systemImage: "arrow.clockwise")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .keyboardShortcut("r", modifiers: [.command])
+
+            Spacer()
+
+            Button {
+                NSApplication.shared.terminate(nil)
+            } label: {
+                Label("종료", systemImage: "power")
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .tint(.red)
+            .keyboardShortcut("q")
+        }
+    }
+}
+
+private struct MetricCard: View {
+    let title: String
+    let subtitle: String
+    let details: String
+    let value: Double
+    let iconName: String
+    let tone: UsageTone
+
+    var body: some View {
+        TrayCard(tint: tone.color.opacity(0.10)) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(tone.color.opacity(0.15))
+
+                        Image(systemName: iconName)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(tone.color)
+                    }
+                    .frame(width: 36, height: 36)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title)
+                            .font(.headline)
+
+                        Text(subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(value.percentText)
+                            .font(.system(size: 24, weight: .bold, design: .rounded))
+                            .monospacedDigit()
+
+                        Text(tone.badgeTitle)
+                            .font(.caption2)
+                            .foregroundStyle(tone.color)
+                    }
+                }
+
+                Gauge(value: value, in: 0...1) {
+                    EmptyView()
+                }
+                .gaugeStyle(.accessoryLinear)
+                .tint(tone.color)
+
+                Text(details)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-            } else {
-                Text(launchAtLoginManager.errorMessage ?? launchAtLoginManager.statusMessage)
-                    .font(.caption)
-                    .foregroundStyle(
-                        launchAtLoginManager.errorMessage == nil
-                        ? AnyShapeStyle(.secondary)
-                        : AnyShapeStyle(.red)
-                    )
-            }
-
-            if launchAtLoginManager.shouldShowSystemSettingsButton {
-                Button("시스템 설정 열기") {
-                    launchAtLoginManager.openSystemSettingsLoginItems()
-                }
-                .font(.caption)
+                    .lineLimit(2)
             }
         }
     }
 }
 
-private struct MetricRow: View {
-    let title: String
-    let value: Double
-    let details: String
+private struct TrayCard<Content: View>: View {
+    let tint: Color
+    @ViewBuilder var content: Content
+
+    init(tint: Color = .clear, @ViewBuilder content: () -> Content) {
+        self.tint = tint
+        self.content = content()
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(title)
-                    .font(.headline)
-                Spacer()
-                Text(value.percentText)
-                    .font(.system(.body, design: .monospaced))
-                    .fontWeight(.semibold)
+        content
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(.regularMaterial)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(tint)
+                    }
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .strokeBorder(.white.opacity(0.08), lineWidth: 1)
+                    }
             }
+    }
+}
 
-            Gauge(value: value, in: 0...1) {
-                EmptyView()
-            }
-            .gaugeStyle(.accessoryLinear)
+private struct SectionHeader: View {
+    let title: String
+    let subtitle: String
 
-            Text(details)
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.headline)
+
+            Text(subtitle)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct StatusBadge: View {
+    let title: String
+    let tone: UsageTone
+
+    var body: some View {
+        Text(title)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(tone.color)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(tone.color.opacity(0.15))
+            )
+    }
+}
+
+private struct InlineStatusMessage: View {
+    let iconName: String
+    let message: String
+    let tone: StatusTone
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: iconName)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(tone.color)
+                .frame(width: 14)
+
+            Text(message)
+                .font(.caption)
+                .foregroundStyle(tone.color)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+private enum UsageTone {
+    case stable
+    case caution
+    case critical
+
+    init(value: Double) {
+        switch value {
+        case 0.85...:
+            self = .critical
+        case 0.65...:
+            self = .caution
+        default:
+            self = .stable
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .stable:
+            return .green
+        case .caution:
+            return .orange
+        case .critical:
+            return .red
+        }
+    }
+
+    var badgeTitle: String {
+        switch self {
+        case .stable:
+            return "안정"
+        case .caution:
+            return "주의"
+        case .critical:
+            return "높음"
+        }
+    }
+}
+
+private enum StatusTone {
+    case positive
+    case neutral
+    case warning
+    case error
+
+    var color: Color {
+        switch self {
+        case .positive:
+            return .green
+        case .neutral:
+            return .secondary
+        case .warning:
+            return .orange
+        case .error:
+            return .red
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .positive:
+            return "checkmark.seal.fill"
+        case .neutral:
+            return "info.circle.fill"
+        case .warning:
+            return "exclamationmark.triangle.fill"
+        case .error:
+            return "xmark.octagon.fill"
+        }
+    }
+}
+
+private extension SystemSnapshot {
+    var dominantMetric: (title: String, value: Double, tone: UsageTone) {
+        [
+            (title: "CPU", value: cpuUsage, tone: UsageTone(value: cpuUsage)),
+            (title: "Memory", value: memoryUsage, tone: UsageTone(value: memoryUsage)),
+            (title: "Disk", value: diskUsage, tone: UsageTone(value: diskUsage))
+        ]
+        .max { lhs, rhs in lhs.value < rhs.value }
+        ?? (title: "CPU", value: cpuUsage, tone: UsageTone(value: cpuUsage))
+    }
+
+    var summaryLine: String {
+        "CPU \(cpuUsage.percentText) · MEM \(memoryUsage.percentText) · DISK \(diskUsage.percentText)"
+    }
+}
+
+private extension Double {
+    var statusDescription: String {
+        switch UsageTone(value: self) {
+        case .stable:
+            return "현재 부하는 비교적 안정적입니다."
+        case .caution:
+            return "사용량이 높아지고 있어 확인이 필요합니다."
+        case .critical:
+            return "즉시 확인이 필요한 높은 사용량입니다."
         }
     }
 }

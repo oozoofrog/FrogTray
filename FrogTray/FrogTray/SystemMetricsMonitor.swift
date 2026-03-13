@@ -30,8 +30,20 @@ struct SystemSnapshot {
         lastUpdated: .now
     )
 
-    var menuBarTitle: String {
-        "C\(cpuUsage.percentText) M\(memoryUsage.percentText) D\(diskUsage.percentText)"
+    var menuBarMetricsText: String {
+        "C\(cpuUsage.percentValueText) M\(memoryUsage.percentValueText) D\(diskUsage.percentValueText)"
+    }
+
+    var menuBarAccessibilityText: String {
+        "CPU \(cpuUsage.percentText), Memory \(memoryUsage.percentText), Disk \(diskUsage.percentText)"
+    }
+
+    var worstUsage: Double {
+        max(cpuUsage, memoryUsage, diskUsage)
+    }
+
+    var frogBellyState: FrogBellyState {
+        FrogBellyState(usage: worstUsage)
     }
 
     var memoryUsedText: String {
@@ -195,9 +207,33 @@ final class SystemMetricsMonitor: ObservableObject {
     }
 }
 
+enum FrogBellyState: String {
+    case calm
+    case normal
+    case warning
+    case critical
+
+    init(usage: Double) {
+        switch usage {
+        case 0.85...:
+            self = .critical
+        case 0.65...:
+            self = .warning
+        case 0.40...:
+            self = .normal
+        default:
+            self = .calm
+        }
+    }
+}
+
 extension Double {
-    var percentText: String {
+    var percentValueText: String {
         let percentage = Int((max(0, min(self, 1)) * 100).rounded())
-        return "\(percentage)%"
+        return "\(percentage)"
+    }
+
+    var percentText: String {
+        "\(percentValueText)%"
     }
 }
