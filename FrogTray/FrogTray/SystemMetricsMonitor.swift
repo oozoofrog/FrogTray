@@ -9,6 +9,32 @@ import Combine
 import Foundation
 import Darwin
 
+// MARK: - Detail Data Models
+
+struct CPUDetail {
+    let userUsage: Double
+    let systemUsage: Double
+    let idleUsage: Double
+    let coreUsages: [Double]
+}
+
+struct MemoryDetail {
+    let activeBytes: UInt64
+    let wiredBytes: UInt64
+    let compressedBytes: UInt64
+    let inactiveBytes: UInt64
+    let freeBytes: UInt64
+}
+
+struct DiskDetail {
+    let usedBytes: Int64
+    let freeBytes: Int64
+    let totalBytes: Int64
+    let purgeableBytes: Int64
+}
+
+// MARK: - SystemSnapshot
+
 struct SystemSnapshot {
     let cpuUsage: Double
     let memoryUsage: Double
@@ -19,6 +45,10 @@ struct SystemSnapshot {
     let diskTotalBytes: Int64
     let lastUpdated: Date
 
+    let cpuDetail: CPUDetail?
+    let memoryDetail: MemoryDetail?
+    let diskDetail: DiskDetail?
+
     static let placeholder = SystemSnapshot(
         cpuUsage: 0,
         memoryUsage: 0,
@@ -27,7 +57,10 @@ struct SystemSnapshot {
         memoryTotalBytes: ProcessInfo.processInfo.physicalMemory,
         diskUsedBytes: 0,
         diskTotalBytes: 0,
-        lastUpdated: .now
+        lastUpdated: .now,
+        cpuDetail: nil,
+        memoryDetail: nil,
+        diskDetail: nil
     )
 
     var menuBarMetricsText: String {
@@ -54,6 +87,11 @@ struct SystemSnapshot {
         ByteCountFormatter.string(fromByteCount: Int64(memoryTotalBytes), countStyle: .memory)
     }
 
+    var memoryFreeText: String {
+        guard let detail = memoryDetail else { return "—" }
+        return ByteCountFormatter.string(fromByteCount: Int64(detail.freeBytes), countStyle: .memory)
+    }
+
     var diskUsedText: String {
         ByteCountFormatter.string(fromByteCount: diskUsedBytes, countStyle: .file)
     }
@@ -61,7 +99,14 @@ struct SystemSnapshot {
     var diskTotalText: String {
         ByteCountFormatter.string(fromByteCount: diskTotalBytes, countStyle: .file)
     }
+
+    var diskFreeText: String {
+        guard let detail = diskDetail else { return "—" }
+        return ByteCountFormatter.string(fromByteCount: detail.freeBytes, countStyle: .file)
+    }
 }
+
+// MARK: - SystemMetricsMonitor
 
 @MainActor
 final class SystemMetricsMonitor: ObservableObject {
@@ -69,6 +114,7 @@ final class SystemMetricsMonitor: ObservableObject {
 
     private var timerCancellable: AnyCancellable?
     private var previousCPUTicks: [UInt32]?
+    private var previousPerCoreTicks: [[UInt32]]?
 
     init(refreshInterval: TimeInterval = 2) {
         refresh()
@@ -85,23 +131,38 @@ final class SystemMetricsMonitor: ObservableObject {
     }
 
     func refresh() {
-        let cpuUsage = readCPUUsage() ?? snapshot.cpuUsage
-        let memorySample = readMemorySample() ?? (snapshot.memoryUsage, snapshot.memoryUsedBytes, snapshot.memoryTotalBytes)
-        let diskSample = readDiskSample() ?? (snapshot.diskUsage, snapshot.diskUsedBytes, snapshot.diskTotalBytes)
+        let cpuResult = readCPUUsage()
+        let cpuUsage = cpuResult?.usage ?? snapshot.cpuUsage
+        let cpuDetail = cpuResult.map { result in
+            CPUDetail(
+                userUsage: result.user,
+                systemUsage: result.system,
+                idleUsage: result.idle,
+                coreUsages: readPerCoreCPUUsage() ?? []
+            )
+        }
+
+        let memResult = readMemorySample()
+        let memorySample = memResult ?? (usage: snapshot.memoryUsage, used: snapshot.memoryUsedBytes, total: snapshot.memoryTotalBytes, detail: snapshot.memoryDetail)
+        let diskResult = readDiskSample()
+        let diskSample = diskResult ?? (usage: snapshot.diskUsage, used: snapshot.diskUsedBytes, total: snapshot.diskTotalBytes, detail: snapshot.diskDetail)
 
         snapshot = SystemSnapshot(
             cpuUsage: cpuUsage,
-            memoryUsage: memorySample.0,
-            diskUsage: diskSample.0,
-            memoryUsedBytes: memorySample.1,
-            memoryTotalBytes: memorySample.2,
-            diskUsedBytes: diskSample.1,
-            diskTotalBytes: diskSample.2,
-            lastUpdated: .now
+            memoryUsage: memorySample.usage,
+            diskUsage: diskSample.usage,
+            memoryUsedBytes: memorySample.used,
+            memoryTotalBytes: memorySample.total,
+            diskUsedBytes: diskSample.used,
+            diskTotalBytes: diskSample.total,
+            lastUpdated: .now,
+            cpuDetail: cpuDetail,
+            memoryDetail: memorySample.detail,
+            diskDetail: diskSample.detail
         )
     }
 
-    private func readCPUUsage() -> Double? {
+    private func readCPUUsage() -> (usage: Double, user: Double, system: Double, idle: Double)? {
         var cpuInfo = host_cpu_load_info_data_t()
         var count = mach_msg_type_number_t(MemoryLayout<host_cpu_load_info_data_t>.stride / MemoryLayout<integer_t>.stride)
 
@@ -138,15 +199,79 @@ final class SystemMetricsMonitor: ObservableObject {
             return nil
         }
 
-        let busyTicks =
-            deltas[Int(CPU_STATE_USER)] +
-            deltas[Int(CPU_STATE_SYSTEM)] +
-            deltas[Int(CPU_STATE_NICE)]
+        let userDelta = deltas[Int(CPU_STATE_USER)] + deltas[Int(CPU_STATE_NICE)]
+        let systemDelta = deltas[Int(CPU_STATE_SYSTEM)]
+        let idleDelta = deltas[Int(CPU_STATE_IDLE)]
 
-        return max(0, min(busyTicks / totalTicks, 1))
+        let usage = max(0, min((userDelta + systemDelta) / totalTicks, 1))
+        let user = userDelta / totalTicks
+        let system = systemDelta / totalTicks
+        let idle = idleDelta / totalTicks
+
+        return (usage, user, system, idle)
     }
 
-    private func readMemorySample() -> (Double, UInt64, UInt64)? {
+    private func readPerCoreCPUUsage() -> [Double]? {
+        var processorInfo: processor_info_array_t?
+        var processorMsgCount: mach_msg_type_number_t = 0
+        var processorCount: natural_t = 0
+
+        let result = host_processor_info(
+            mach_host_self(),
+            PROCESSOR_CPU_LOAD_INFO,
+            &processorCount,
+            &processorInfo,
+            &processorMsgCount
+        )
+
+        guard result == KERN_SUCCESS, let processorInfo else {
+            return nil
+        }
+
+        defer {
+            let size = vm_size_t(processorMsgCount) * vm_size_t(MemoryLayout<integer_t>.stride)
+            vm_deallocate(mach_task_self_, vm_address_t(bitPattern: processorInfo), size)
+        }
+
+        let coreCount = Int(processorCount)
+        var currentPerCoreTicks: [[UInt32]] = []
+
+        for i in 0..<coreCount {
+            let offset = Int(CPU_STATE_MAX) * i
+            let ticks: [UInt32] = [
+                UInt32(bitPattern: processorInfo[offset + Int(CPU_STATE_USER)]),
+                UInt32(bitPattern: processorInfo[offset + Int(CPU_STATE_SYSTEM)]),
+                UInt32(bitPattern: processorInfo[offset + Int(CPU_STATE_IDLE)]),
+                UInt32(bitPattern: processorInfo[offset + Int(CPU_STATE_NICE)]),
+            ]
+            currentPerCoreTicks.append(ticks)
+        }
+
+        guard let previousPerCoreTicks, previousPerCoreTicks.count == coreCount else {
+            self.previousPerCoreTicks = currentPerCoreTicks
+            return nil
+        }
+
+        self.previousPerCoreTicks = currentPerCoreTicks
+
+        var coreUsages: [Double] = []
+        for i in 0..<coreCount {
+            let cur = currentPerCoreTicks[i]
+            let prev = previousPerCoreTicks[i]
+            let deltas = zip(cur, prev).map { Double($0) - Double($1) }
+            let total = deltas.reduce(0, +)
+            guard total > 0 else {
+                coreUsages.append(0)
+                continue
+            }
+            let busy = deltas[0] + deltas[1] + deltas[3] // user + system + nice
+            coreUsages.append(max(0, min(busy / total, 1)))
+        }
+
+        return coreUsages
+    }
+
+    private func readMemorySample() -> (usage: Double, used: UInt64, total: UInt64, detail: MemoryDetail?)? {
         var vmStats = vm_statistics64_data_t()
         var count = mach_msg_type_number_t(MemoryLayout<vm_statistics64_data_t>.stride / MemoryLayout<integer_t>.stride)
 
@@ -161,12 +286,14 @@ final class SystemMetricsMonitor: ObservableObject {
         }
 
         let pageSize = UInt64(vm_kernel_page_size)
-        let usedBytes =
-            (UInt64(vmStats.active_count) +
-             UInt64(vmStats.wire_count) +
-             UInt64(vmStats.compressor_page_count) +
-             UInt64(vmStats.speculative_count)) * pageSize
+        let activeBytes = UInt64(vmStats.active_count) * pageSize
+        let wiredBytes = UInt64(vmStats.wire_count) * pageSize
+        let compressedBytes = UInt64(vmStats.compressor_page_count) * pageSize
+        let inactiveBytes = UInt64(vmStats.inactive_count) * pageSize
+        let speculativeBytes = UInt64(vmStats.speculative_count) * pageSize
+        let freeBytes = UInt64(vmStats.free_count) * pageSize
 
+        let usedBytes = activeBytes + wiredBytes + compressedBytes + speculativeBytes
         let totalBytes = ProcessInfo.processInfo.physicalMemory
         guard totalBytes > 0 else {
             return nil
@@ -175,10 +302,18 @@ final class SystemMetricsMonitor: ObservableObject {
         let clampedUsedBytes = min(usedBytes, totalBytes)
         let usage = Double(clampedUsedBytes) / Double(totalBytes)
 
-        return (usage, clampedUsedBytes, totalBytes)
+        let detail = MemoryDetail(
+            activeBytes: activeBytes,
+            wiredBytes: wiredBytes,
+            compressedBytes: compressedBytes,
+            inactiveBytes: inactiveBytes,
+            freeBytes: freeBytes
+        )
+
+        return (usage, clampedUsedBytes, totalBytes, detail)
     }
 
-    private func readDiskSample() -> (Double, Int64, Int64)? {
+    private func readDiskSample() -> (usage: Double, used: Int64, total: Int64, detail: DiskDetail?)? {
         let volumeURL = URL(fileURLWithPath: "/")
         let keys: Set<URLResourceKey> = [
             .volumeAvailableCapacityForImportantUsageKey,
@@ -194,8 +329,10 @@ final class SystemMetricsMonitor: ObservableObject {
         let totalBytes = Int64(totalCapacity)
         let preferredAvailableBytes = values.volumeAvailableCapacityForImportantUsage.map { Int64($0) }
         let fallbackAvailableBytes = values.volumeAvailableCapacity.map { Int64($0) }
-        let availableBytes = preferredAvailableBytes ?? fallbackAvailableBytes ?? 0
-        let usedBytes = max(totalBytes - availableBytes, 0)
+        let availableForImportant = preferredAvailableBytes ?? fallbackAvailableBytes ?? 0
+        let availableBytes = fallbackAvailableBytes ?? 0
+        let usedBytes = max(totalBytes - availableForImportant, 0)
+        let purgeableBytes = max(availableForImportant - availableBytes, 0)
 
         guard totalBytes > 0 else {
             return nil
@@ -203,9 +340,18 @@ final class SystemMetricsMonitor: ObservableObject {
 
         let usage = Double(usedBytes) / Double(totalBytes)
 
-        return (usage, usedBytes, totalBytes)
+        let detail = DiskDetail(
+            usedBytes: usedBytes,
+            freeBytes: availableForImportant,
+            totalBytes: totalBytes,
+            purgeableBytes: purgeableBytes
+        )
+
+        return (usage, usedBytes, totalBytes, detail)
     }
 }
+
+// MARK: - FrogBellyState
 
 enum FrogBellyState: String {
     case calm
@@ -226,6 +372,8 @@ enum FrogBellyState: String {
         }
     }
 }
+
+// MARK: - Double Extensions
 
 extension Double {
     var percentValueText: String {

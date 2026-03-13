@@ -8,9 +8,36 @@
 import AppKit
 import SwiftUI
 
+// MARK: - Navigation Types
+
+enum MetricKind: CaseIterable {
+    case cpu, memory, disk
+}
+
+enum TrayScreen: Equatable {
+    case main
+    case detail(MetricKind)
+
+    static func == (lhs: TrayScreen, rhs: TrayScreen) -> Bool {
+        switch (lhs, rhs) {
+        case (.main, .main):
+            return true
+        case (.detail(let l), .detail(let r)):
+            return l == r
+        default:
+            return false
+        }
+    }
+}
+
+// MARK: - ContentView
+
 struct ContentView: View {
     @ObservedObject var monitor: SystemMetricsMonitor
     @ObservedObject var launchAtLoginManager: LaunchAtLoginManager
+    @ObservedObject var processMonitor: ProcessMonitor
+
+    @State private var activeScreen: TrayScreen = .main
 
     private var launchAtLoginBinding: Binding<Bool> {
         Binding(
@@ -43,37 +70,80 @@ struct ContentView: View {
     }
 
     var body: some View {
+        Group {
+            switch activeScreen {
+            case .main:
+                mainView
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .leading).combined(with: .opacity),
+                        removal: .move(edge: .leading).combined(with: .opacity)
+                    ))
+            case .detail(let kind):
+                MetricDetailView(
+                    kind: kind,
+                    snapshot: monitor.snapshot,
+                    processMonitor: processMonitor,
+                    onBack: { withAnimation(.easeInOut(duration: 0.2)) { activeScreen = .main } }
+                )
+                .transition(.asymmetric(
+                    insertion: .move(edge: .trailing).combined(with: .opacity),
+                    removal: .move(edge: .trailing).combined(with: .opacity)
+                ))
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: activeScreen)
+    }
+
+    private var mainView: some View {
         VStack(alignment: .leading, spacing: 12) {
             summaryCard
 
             SectionHeader(title: "실시간 상태", subtitle: "지금 가장 중요한 시스템 지표")
 
-            MetricCard(
-                title: "CPU",
-                subtitle: "전체 CPU 사용률",
-                details: monitor.snapshot.cpuUsage.statusDescription,
-                value: monitor.snapshot.cpuUsage,
-                iconName: "cpu",
-                tone: UsageTone(value: monitor.snapshot.cpuUsage)
-            )
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) { activeScreen = .detail(.cpu) }
+            } label: {
+                MetricCard(
+                    title: "CPU",
+                    subtitle: "전체 CPU 사용률",
+                    details: monitor.snapshot.cpuUsage.statusDescription,
+                    value: monitor.snapshot.cpuUsage,
+                    iconName: "cpu",
+                    tone: UsageTone(value: monitor.snapshot.cpuUsage),
+                    showChevron: true
+                )
+            }
+            .buttonStyle(.plain)
 
-            MetricCard(
-                title: "Memory",
-                subtitle: "메모리 점유",
-                details: "\(monitor.snapshot.memoryUsedText) / \(monitor.snapshot.memoryTotalText)",
-                value: monitor.snapshot.memoryUsage,
-                iconName: "memorychip",
-                tone: UsageTone(value: monitor.snapshot.memoryUsage)
-            )
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) { activeScreen = .detail(.memory) }
+            } label: {
+                MetricCard(
+                    title: "Memory",
+                    subtitle: "메모리 점유",
+                    details: "\(monitor.snapshot.memoryUsedText) / \(monitor.snapshot.memoryTotalText)",
+                    value: monitor.snapshot.memoryUsage,
+                    iconName: "memorychip",
+                    tone: UsageTone(value: monitor.snapshot.memoryUsage),
+                    showChevron: true
+                )
+            }
+            .buttonStyle(.plain)
 
-            MetricCard(
-                title: "Disk",
-                subtitle: "시스템 디스크 사용량",
-                details: "\(monitor.snapshot.diskUsedText) / \(monitor.snapshot.diskTotalText)",
-                value: monitor.snapshot.diskUsage,
-                iconName: "internaldrive",
-                tone: UsageTone(value: monitor.snapshot.diskUsage)
-            )
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) { activeScreen = .detail(.disk) }
+            } label: {
+                MetricCard(
+                    title: "Disk",
+                    subtitle: "시스템 디스크 사용량",
+                    details: "\(monitor.snapshot.diskUsedText) / \(monitor.snapshot.diskTotalText)",
+                    value: monitor.snapshot.diskUsage,
+                    iconName: "internaldrive",
+                    tone: UsageTone(value: monitor.snapshot.diskUsage),
+                    showChevron: true
+                )
+            }
+            .buttonStyle(.plain)
 
             settingsCard
 
@@ -174,6 +244,7 @@ struct ContentView: View {
         HStack(spacing: 10) {
             Button {
                 monitor.refresh()
+                processMonitor.refresh()
                 launchAtLoginManager.refresh()
             } label: {
                 Label("새로고침", systemImage: "arrow.clockwise")
@@ -197,13 +268,16 @@ struct ContentView: View {
     }
 }
 
-private struct MetricCard: View {
+// MARK: - MetricCard
+
+struct MetricCard: View {
     let title: String
     let subtitle: String
     let details: String
     let value: Double
     let iconName: String
     let tone: UsageTone
+    var showChevron: Bool = false
 
     var body: some View {
         TrayCard(tint: tone.color.opacity(0.10)) {
@@ -230,14 +304,22 @@ private struct MetricCard: View {
 
                     Spacer(minLength: 8)
 
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text(value.percentText)
-                            .font(.system(size: 24, weight: .bold, design: .rounded))
-                            .monospacedDigit()
+                    HStack(spacing: 6) {
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text(value.percentText)
+                                .font(.system(size: 24, weight: .bold, design: .rounded))
+                                .monospacedDigit()
 
-                        Text(tone.badgeTitle)
-                            .font(.caption2)
-                            .foregroundStyle(tone.color)
+                            Text(tone.badgeTitle)
+                                .font(.caption2)
+                                .foregroundStyle(tone.color)
+                        }
+
+                        if showChevron {
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
                     }
                 }
 
@@ -256,7 +338,9 @@ private struct MetricCard: View {
     }
 }
 
-private struct TrayCard<Content: View>: View {
+// MARK: - Shared UI Components
+
+struct TrayCard<Content: View>: View {
     let tint: Color
     @ViewBuilder var content: Content
 
@@ -284,7 +368,7 @@ private struct TrayCard<Content: View>: View {
     }
 }
 
-private struct SectionHeader: View {
+struct SectionHeader: View {
     let title: String
     let subtitle: String
 
@@ -300,7 +384,7 @@ private struct SectionHeader: View {
     }
 }
 
-private struct StatusBadge: View {
+struct StatusBadge: View {
     let title: String
     let tone: UsageTone
 
@@ -337,7 +421,9 @@ private struct InlineStatusMessage: View {
     }
 }
 
-private enum UsageTone {
+// MARK: - Tone Enums
+
+enum UsageTone {
     case stable
     case caution
     case critical
@@ -409,6 +495,8 @@ private enum StatusTone {
     }
 }
 
+// MARK: - SystemSnapshot Extensions
+
 private extension SystemSnapshot {
     var dominantMetric: (title: String, value: Double, tone: UsageTone) {
         [
@@ -438,12 +526,15 @@ private extension Double {
     }
 }
 
+// MARK: - Preview
+
 #Preview {
     ContentView(
         monitor: SystemMetricsMonitor(refreshInterval: 60),
         launchAtLoginManager: LaunchAtLoginManager(
             controller: PreviewLaunchAtLoginController(status: .requiresApproval)
-        )
+        ),
+        processMonitor: ProcessMonitor(refreshInterval: 60)
     )
 }
 

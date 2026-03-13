@@ -11,12 +11,14 @@ import SwiftUI
 struct FrogTrayApp: App {
     @StateObject private var metricsMonitor = SystemMetricsMonitor()
     @StateObject private var launchAtLoginManager = LaunchAtLoginManager()
+    @StateObject private var processMonitor = ProcessMonitor()
 
     var body: some Scene {
         MenuBarExtra {
             ContentView(
                 monitor: metricsMonitor,
-                launchAtLoginManager: launchAtLoginManager
+                launchAtLoginManager: launchAtLoginManager,
+                processMonitor: processMonitor
             )
         } label: {
             FrogMenuBarLabel(snapshot: metricsMonitor.snapshot)
