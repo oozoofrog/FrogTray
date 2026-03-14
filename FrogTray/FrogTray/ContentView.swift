@@ -30,6 +30,29 @@ enum TrayScreen: Equatable {
     }
 }
 
+// MARK: - Pond Theme
+
+enum PondTheme {
+    static let pondDeep = Color(hue: 0.48, saturation: 0.55, brightness: 0.30)
+    static let pondMid = Color(hue: 0.46, saturation: 0.40, brightness: 0.50)
+    static let pondSurface = Color(hue: 0.44, saturation: 0.30, brightness: 0.65)
+    static let lilyPadGreen = Color(hue: 0.35, saturation: 0.35, brightness: 0.55)
+    static let lilyPadLight = Color(hue: 0.33, saturation: 0.20, brightness: 0.75)
+    static let mossFern = Color(hue: 0.30, saturation: 0.45, brightness: 0.40)
+
+    static let pondGradient = LinearGradient(
+        colors: [pondDeep, pondMid, pondSurface.opacity(0.3)],
+        startPoint: .bottom,
+        endPoint: .top
+    )
+
+    static let lilyPadGradient = LinearGradient(
+        colors: [lilyPadGreen.opacity(0.08), lilyPadLight.opacity(0.04)],
+        startPoint: .bottomLeading,
+        endPoint: .topTrailing
+    )
+}
+
 // MARK: - ContentView
 
 struct ContentView: View {
@@ -98,8 +121,6 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 12) {
             summaryCard
 
-            SectionHeader(title: "실시간 상태", subtitle: "지금 가장 중요한 시스템 지표")
-
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) { activeScreen = .detail(.cpu) }
             } label: {
@@ -116,7 +137,7 @@ struct ContentView: View {
                     showChevron: true
                 )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(CardButtonStyle())
 
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) { activeScreen = .detail(.memory) }
@@ -134,7 +155,7 @@ struct ContentView: View {
                     showChevron: true
                 )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(CardButtonStyle())
 
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) { activeScreen = .detail(.disk) }
@@ -152,7 +173,7 @@ struct ContentView: View {
                     showChevron: true
                 )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(CardButtonStyle())
 
             settingsCard
 
@@ -160,63 +181,84 @@ struct ContentView: View {
         }
         .padding(16)
         .frame(width: 340)
+        .background(
+            LinearGradient(
+                colors: [PondTheme.pondDeep.opacity(0.08), Color.clear],
+                startPoint: .bottom,
+                endPoint: .top
+            )
+        )
         .onAppear {
             launchAtLoginManager.refresh()
         }
     }
 
     private var summaryCard: some View {
-        let dominantMetric = monitor.snapshot.dominantMetric
+        TrayCard {
+            VStack(spacing: 14) {
+                HStack {
+                    FrogStatusIcon(state: monitor.snapshot.frogBellyState)
+                        .foregroundStyle(PondTheme.lilyPadGreen)
+                        .scaleEffect(1.2)
 
-        return TrayCard(tint: dominantMetric.tone.color.opacity(0.15)) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .top, spacing: 12) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(dominantMetric.tone.color.gradient)
+                    Text("개구리 연못")
+                        .font(.headline)
 
-                        Image(systemName: "chart.bar.fill")
-                            .font(.system(size: 20, weight: .semibold))
-                            .foregroundStyle(.white)
-                    }
-                    .frame(width: 42, height: 42)
+                    Spacer()
 
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("FrogTray")
-                            .font(.headline)
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(PondTheme.pondSurface)
+                            .frame(width: 5, height: 5)
+                            .shadow(color: PondTheme.pondSurface.opacity(0.6), radius: 3)
 
-                        Text("\(dominantMetric.title) 사용량이 가장 높습니다.")
-                            .font(.subheadline)
+                        Text(monitor.snapshot.lastUpdated.formatted(date: .omitted, time: .shortened))
+                            .font(.caption.monospacedDigit())
                             .foregroundStyle(.secondary)
                     }
-
-                    Spacer(minLength: 8)
-
-                    StatusBadge(title: dominantMetric.tone.badgeTitle, tone: dominantMetric.tone)
                 }
 
-                Text(monitor.snapshot.summaryLine)
-                    .font(.system(.body, design: .monospaced))
-                    .fontWeight(.semibold)
-                    .monospacedDigit()
-
-                HStack(spacing: 6) {
-                    Image(systemName: "clock")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    Text("마지막 갱신 \(monitor.snapshot.lastUpdated.formatted(date: .omitted, time: .shortened))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                HStack(spacing: 0) {
+                    miniGauge(title: "CPU", value: monitor.snapshot.cpuUsage)
+                    miniGauge(title: "MEM", value: monitor.snapshot.memoryUsage)
+                    miniGauge(title: "DISK", value: monitor.snapshot.diskUsage)
                 }
             }
         }
     }
 
+    private func miniGauge(title: String, value: Double) -> some View {
+        let tone = UsageTone(value: value)
+        return VStack(spacing: 5) {
+            ZStack {
+                Gauge(value: value, in: 0...1) {
+                    Text(title)
+                        .font(.system(size: 8, weight: .bold, design: .rounded))
+                }
+                .gaugeStyle(.accessoryCircular)
+                .tint(Gradient(colors: [tone.color.opacity(0.5), tone.color]))
+                .scaleEffect(1.15)
+
+                Circle()
+                    .strokeBorder(tone.color.opacity(0.2), lineWidth: 1.5)
+                    .frame(width: 48, height: 48)
+            }
+
+            Text(value.percentText)
+                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .monospacedDigit()
+
+            Text(tone.badgeTitle)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(tone.color)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
     private var settingsCard: some View {
         TrayCard {
             VStack(alignment: .leading, spacing: 12) {
-                SectionHeader(title: "설정", subtitle: "앱 동작과 로그인 시 자동 실행")
+                SectionHeader(title: "연못 설정", subtitle: "앱 동작과 로그인 시 자동 실행")
 
                 Toggle("로그인 시 자동 실행", isOn: launchAtLoginBinding)
                     .toggleStyle(.switch)
@@ -276,7 +318,7 @@ struct ContentView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
-            .tint(.red)
+            .tint(UsageTone.critical.color)
             .keyboardShortcut("q")
         }
     }
@@ -299,7 +341,7 @@ struct MetricCard: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .top, spacing: 12) {
                     ZStack {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        Circle()
                             .fill(tone.color.opacity(0.15))
 
                         Image(systemName: iconName)
@@ -338,18 +380,32 @@ struct MetricCard: View {
                     }
                 }
 
-                Gauge(value: value, in: 0...1) {
-                    EmptyView()
+                // Capsule "수위 바"
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule(style: .continuous)
+                            .fill(tone.color.opacity(0.12))
+
+                        Capsule(style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    colors: [tone.color.opacity(0.6), tone.color],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .frame(width: max(0, geo.size.width * CGFloat(value)))
+                    }
                 }
-                .gaugeStyle(.accessoryLinear)
-                .tint(tone.color)
+                .frame(height: 6)
+                .clipShape(Capsule(style: .continuous))
 
                 if let topProcess {
                     HStack(spacing: 4) {
-                        Image(systemName: "arrow.up.circle.fill")
+                        Image(systemName: "drop.fill")
                             .font(.caption2)
                             .foregroundStyle(tone.color)
-                        Text("1위  \(topProcess)")
+                        Text("가장 큰 물결  \(topProcess)")
                             .font(.caption.monospacedDigit())
                             .foregroundStyle(.primary)
                             .lineLimit(1)
@@ -363,6 +419,17 @@ struct MetricCard: View {
                     .lineLimit(2)
             }
         }
+    }
+}
+
+// MARK: - Card Button Style
+
+struct CardButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .brightness(configuration.isPressed ? -0.03 : 0)
+            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 
@@ -383,14 +450,18 @@ struct TrayCard<Content: View>: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(.regularMaterial)
+                    .fill(.ultraThinMaterial)
                     .overlay {
                         RoundedRectangle(cornerRadius: 18, style: .continuous)
                             .fill(tint)
                     }
                     .overlay {
                         RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .strokeBorder(.white.opacity(0.08), lineWidth: 1)
+                            .fill(PondTheme.lilyPadGradient)
+                    }
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .strokeBorder(PondTheme.lilyPadGreen.opacity(0.15), lineWidth: 1)
                     }
             }
     }
@@ -402,8 +473,14 @@ struct SectionHeader: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .font(.headline)
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(PondTheme.lilyPadGreen)
+                    .frame(width: 6, height: 6)
+
+                Text(title)
+                    .font(.headline)
+            }
 
             Text(subtitle)
                 .font(.caption)
@@ -425,6 +502,10 @@ struct StatusBadge: View {
             .background(
                 Capsule(style: .continuous)
                     .fill(tone.color.opacity(0.15))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .strokeBorder(tone.color.opacity(0.25), lineWidth: 0.5)
             )
     }
 }
@@ -470,22 +551,22 @@ enum UsageTone {
     var color: Color {
         switch self {
         case .stable:
-            return .green
+            return Color(hue: 0.48, saturation: 0.65, brightness: 0.75)
         case .caution:
-            return .orange
+            return Color(hue: 0.10, saturation: 0.70, brightness: 0.85)
         case .critical:
-            return .red
+            return Color(hue: 0.02, saturation: 0.60, brightness: 0.90)
         }
     }
 
     var badgeTitle: String {
         switch self {
         case .stable:
-            return "안정"
+            return "잔잔"
         case .caution:
-            return "주의"
+            return "출렁"
         case .critical:
-            return "높음"
+            return "넘침"
         }
     }
 }
@@ -499,13 +580,13 @@ private enum StatusTone {
     var color: Color {
         switch self {
         case .positive:
-            return .green
+            return PondTheme.lilyPadGreen
         case .neutral:
             return .secondary
         case .warning:
-            return .orange
+            return UsageTone.caution.color
         case .error:
-            return .red
+            return UsageTone.critical.color
         }
     }
 
@@ -545,11 +626,11 @@ private extension Double {
     var statusDescription: String {
         switch UsageTone(value: self) {
         case .stable:
-            return "현재 부하는 비교적 안정적입니다."
+            return "연못 수면이 고요합니다"
         case .caution:
-            return "사용량이 높아지고 있어 확인이 필요합니다."
+            return "수면에 파문이 일고 있습니다"
         case .critical:
-            return "즉시 확인이 필요한 높은 사용량입니다."
+            return "연못이 범람 직전입니다!"
         }
     }
 }

@@ -28,6 +28,13 @@ struct MetricDetailView: View {
         }
         .padding(16)
         .frame(width: 340)
+        .background(
+            LinearGradient(
+                colors: [PondTheme.pondDeep.opacity(0.08), Color.clear],
+                startPoint: .bottom,
+                endPoint: .top
+            )
+        )
     }
 
     // MARK: - Back Button
@@ -62,9 +69,9 @@ struct MetricDetailView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         SectionHeader(title: "사용률 분류", subtitle: "User / System / Idle 비율")
 
-                        usageBar(label: "User", value: detail.userUsage, color: .blue)
-                        usageBar(label: "System", value: detail.systemUsage, color: .red)
-                        usageBar(label: "Idle", value: detail.idleUsage, color: .gray)
+                        usageBar(label: "User", value: detail.userUsage, color: PondTheme.pondSurface)
+                        usageBar(label: "System", value: detail.systemUsage, color: PondTheme.mossFern)
+                        usageBar(label: "Idle", value: detail.idleUsage, color: PondTheme.lilyPadGreen)
                     }
                 }
 
@@ -102,7 +109,8 @@ struct MetricDetailView: View {
             }
 
             processListCard(
-                title: "CPU 사용량 상위",
+                title: "CPU 물결 상위",
+                subtitle: "연못에서 가장 큰 파문을 일으키는 생물",
                 processes: processMonitor.topCPUProcesses,
                 valueFormatter: { String(format: "%.1f%%", $0.totalCPUUsage) }
             )
@@ -142,7 +150,8 @@ struct MetricDetailView: View {
             }
 
             processListCard(
-                title: "메모리 사용량 상위",
+                title: "메모리 서식 상위",
+                subtitle: "연못에서 가장 넓은 자리를 차지하는 생물",
                 processes: processMonitor.topMemoryProcesses,
                 valueFormatter: { formatBytes($0.totalMemoryBytes) }
             )
@@ -177,7 +186,8 @@ struct MetricDetailView: View {
             }
 
             processListCard(
-                title: "Disk I/O 상위",
+                title: "Disk I/O 활동 상위",
+                subtitle: "연못 바닥을 가장 많이 뒤젓는 생물",
                 processes: processMonitor.topDiskIOProcesses,
                 valueFormatter: { formatBytes($0.totalDiskIOBytes) }
             )
@@ -189,13 +199,19 @@ struct MetricDetailView: View {
     private func metricHeader(title: String, iconName: String, value: Double, tone: UsageTone) -> some View {
         TrayCard(tint: tone.color.opacity(0.10)) {
             HStack(spacing: 16) {
-                Gauge(value: value, in: 0...1) {
-                    Image(systemName: iconName)
-                        .font(.system(size: 12, weight: .semibold))
+                ZStack {
+                    Gauge(value: value, in: 0...1) {
+                        Image(systemName: iconName)
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .gaugeStyle(.accessoryCircular)
+                    .tint(tone.color)
+                    .scaleEffect(1.4)
+
+                    Circle()
+                        .strokeBorder(tone.color.opacity(0.25), lineWidth: 1.5)
+                        .frame(width: 56, height: 56)
                 }
-                .gaugeStyle(.accessoryCircular)
-                .tint(tone.color)
-                .scaleEffect(1.4)
                 .frame(width: 56, height: 56)
 
                 VStack(alignment: .leading, spacing: 4) {
@@ -222,11 +238,24 @@ struct MetricDetailView: View {
                 .font(.caption)
                 .frame(width: 50, alignment: .leading)
 
-            Gauge(value: max(0, min(value, 1)), in: 0...1) {
-                EmptyView()
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule(style: .continuous)
+                        .fill(color.opacity(0.12))
+
+                    Capsule(style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [color.opacity(0.6), color],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(width: max(0, geo.size.width * CGFloat(max(0, min(value, 1)))))
+                }
             }
-            .gaugeStyle(.accessoryLinear)
-            .tint(color)
+            .frame(height: 6)
+            .clipShape(Capsule(style: .continuous))
 
             Text(value.percentText)
                 .font(.caption.monospacedDigit())
@@ -249,32 +278,37 @@ struct MetricDetailView: View {
 
     private func processListCard(
         title: String,
+        subtitle: String,
         processes: [ProcessGroup],
         valueFormatter: @escaping (ProcessGroup) -> String
     ) -> some View {
         TrayCard {
             VStack(alignment: .leading, spacing: 10) {
-                SectionHeader(title: title, subtitle: "프로세스별 사용량 (상위 5개)")
+                SectionHeader(title: title, subtitle: subtitle)
 
                 if !processMonitor.isWarmedUp {
                     HStack(spacing: 6) {
                         ProgressView()
                             .controlSize(.small)
-                        Text("첫 번째 갱신 대기 중…")
+                        Text("연못을 관찰하는 중…")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, 8)
                 } else if processes.isEmpty {
-                    Text("활성 프로세스 없음")
+                    Text("연못이 조용합니다")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.vertical, 8)
                 } else {
-                    ForEach(processes) { process in
-                        HStack {
+                    ForEach(Array(processes.enumerated()), id: \.element.id) { index, process in
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(PondTheme.lilyPadGreen.opacity(1.0 - Double(index) * 0.18))
+                                .frame(width: 6, height: 6)
+
                             Text(process.displayName)
                                 .font(.caption)
                                 .lineLimit(1)

@@ -45,7 +45,7 @@ private struct FrogMenuBarLabel: View {
     }
 }
 
-private struct FrogStatusIcon: View {
+struct FrogStatusIcon: View {
     let state: FrogBellyState
 
     private var bellySize: CGSize {
