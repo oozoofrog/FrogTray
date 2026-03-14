@@ -28,7 +28,7 @@ PBXPROJ="${REPO_ROOT}/${PROJECT_DIR}/FrogTray.xcodeproj/project.pbxproj"
 BUILD_DIR="${REPO_ROOT}/.build/release"
 
 # Homebrew tap 경로 (환경변수로 덮어쓰기 가능)
-HOMEBREW_TAP="${HOMEBREW_TAP_PATH:-${REPO_ROOT}/../homebrew-swiftnest}"
+HOMEBREW_TAP="${HOMEBREW_TAP_PATH:-${REPO_ROOT}/../homebrew-tap}"
 
 DRY_RUN=0
 SKIP_BREW=0
@@ -307,6 +307,8 @@ cask "frogtray" do
   desc "macOS menu bar system monitor"
   homepage "https://github.com/${GITHUB_REPO}"
 
+  depends_on macos: ">= :ventura"
+
   app "FrogTray.app"
 
   zap trash: [
@@ -321,10 +323,10 @@ CASK
     git push origin main
 
     info "Cask 업데이트 완료: ${CASK_FILE}"
-    info "설치: brew install --cask oozoofrog/swiftnest/frogtray"
+    info "설치: brew install --cask oozoofrog/tap/frogtray"
   else
     info "[dry-run] Cask 파일 생성/업데이트 → ${CASK_FILE}"
-    info "[dry-run] git commit + push (homebrew-swiftnest)"
+    info "[dry-run] git commit + push (homebrew-tap)"
   fi
 fi
 
@@ -338,7 +340,7 @@ else
   echo "  ${APP_NAME} ${RELEASE_TAG} 릴리스 완료!"
   echo ""
   echo "  설치 방법:"
-  echo "    brew install --cask oozoofrog/swiftnest/frogtray"
+  echo "    brew install --cask oozoofrog/tap/frogtray"
   echo "  업그레이드:"
   echo "    brew upgrade --cask frogtray"
 fi
