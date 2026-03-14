@@ -111,6 +111,9 @@ struct SystemSnapshot {
 @MainActor
 final class SystemMetricsMonitor: ObservableObject {
     @Published private(set) var snapshot = SystemSnapshot.placeholder
+    @Published private(set) var metricsHistory = MetricsHistory()
+
+    var pondState: PondState { PondState(snapshot: snapshot) }
 
     private var timerCancellable: AnyCancellable?
     private var previousCPUTicks: [UInt32]?
@@ -159,6 +162,12 @@ final class SystemMetricsMonitor: ObservableObject {
             cpuDetail: cpuDetail,
             memoryDetail: memorySample.detail,
             diskDetail: diskSample.detail
+        )
+
+        metricsHistory.push(
+            cpu: cpuUsage,
+            memory: memorySample.usage,
+            disk: diskSample.usage
         )
     }
 

@@ -30,29 +30,6 @@ enum TrayScreen: Equatable {
     }
 }
 
-// MARK: - Pond Theme
-
-enum PondTheme {
-    static let pondDeep = Color(hue: 0.48, saturation: 0.55, brightness: 0.30)
-    static let pondMid = Color(hue: 0.46, saturation: 0.40, brightness: 0.50)
-    static let pondSurface = Color(hue: 0.44, saturation: 0.30, brightness: 0.65)
-    static let lilyPadGreen = Color(hue: 0.35, saturation: 0.35, brightness: 0.55)
-    static let lilyPadLight = Color(hue: 0.33, saturation: 0.20, brightness: 0.75)
-    static let mossFern = Color(hue: 0.30, saturation: 0.45, brightness: 0.40)
-
-    static let pondGradient = LinearGradient(
-        colors: [pondDeep, pondMid, pondSurface.opacity(0.3)],
-        startPoint: .bottom,
-        endPoint: .top
-    )
-
-    static let lilyPadGradient = LinearGradient(
-        colors: [lilyPadGreen.opacity(0.08), lilyPadLight.opacity(0.04)],
-        startPoint: .bottomLeading,
-        endPoint: .topTrailing
-    )
-}
-
 // MARK: - ContentView
 
 struct ContentView: View {
@@ -530,46 +507,49 @@ private struct InlineStatusMessage: View {
     }
 }
 
-// MARK: - Tone Enums
+// MARK: - FrogStatusIcon (inline, used in summaryCard)
 
-enum UsageTone {
-    case stable
-    case caution
-    case critical
+private struct FrogStatusIcon: View {
+    let state: FrogBellyState
 
-    init(value: Double) {
-        switch value {
-        case 0.85...:
-            self = .critical
-        case 0.65...:
-            self = .caution
-        default:
-            self = .stable
+    private var bellySize: CGSize {
+        switch state {
+        case .calm:
+            CGSize(width: 5, height: 3.5)
+        case .normal:
+            CGSize(width: 6.5, height: 5)
+        case .warning:
+            CGSize(width: 8, height: 6.5)
+        case .critical:
+            CGSize(width: 9.5, height: 8)
         }
     }
 
-    var color: Color {
-        switch self {
-        case .stable:
-            return Color(hue: 0.48, saturation: 0.65, brightness: 0.75)
-        case .caution:
-            return Color(hue: 0.10, saturation: 0.70, brightness: 0.85)
-        case .critical:
-            return Color(hue: 0.02, saturation: 0.60, brightness: 0.90)
-        }
-    }
+    var body: some View {
+        ZStack {
+            HStack(spacing: 4) {
+                Circle()
+                    .frame(width: 4, height: 4)
+                Circle()
+                    .frame(width: 4, height: 4)
+            }
+            .offset(y: -4.5)
 
-    var badgeTitle: String {
-        switch self {
-        case .stable:
-            return "잔잔"
-        case .caution:
-            return "출렁"
-        case .critical:
-            return "넘침"
+            Capsule(style: .continuous)
+                .frame(width: 11, height: 8)
+                .offset(y: 0.5)
+
+            Ellipse()
+                .frame(width: bellySize.width, height: bellySize.height)
+                .offset(x: 1.5, y: 3.5)
         }
+        .frame(width: 16, height: 14)
+        .foregroundStyle(.primary)
+        .accessibilityHidden(true)
     }
 }
+
+// MARK: - StatusTone
 
 private enum StatusTone {
     case positive
