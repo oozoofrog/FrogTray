@@ -1,0 +1,25 @@
+{
+  "config_path" : "config\/project.yaml",
+  "context_path" : ".swiftnest\/rendered_context.md",
+  "data_version" : 3,
+  "profile" : "advanced",
+  "skill_agent" : "codex",
+  "skills" : [
+    "concurrency-rules",
+    "ios-architecture",
+    "logging-rules",
+    "networking-rules",
+    "swiftui-rules",
+    "testing-rules"
+  ],
+  "workflows" : [
+    "add-feature",
+    "fix-bug",
+    "refactor",
+    "build",
+    "onboarding-review",
+    "permissions",
+    "networking",
+    "review"
+  ]
+}

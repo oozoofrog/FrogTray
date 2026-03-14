@@ -1,0 +1,11 @@
+{
+  "files" : [
+    "concurrency-rules.md",
+    "ios-architecture.md",
+    "logging-rules.md",
+    "networking-rules.md",
+    "swiftui-rules.md",
+    "testing-rules.md"
+  ],
+  "profile" : "advanced"
+}

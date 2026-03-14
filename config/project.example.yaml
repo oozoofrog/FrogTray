@@ -1,0 +1,16 @@
+project_name: MyApp
+optional_watchos_line: ""
+ui_framework: SwiftUI
+architecture_style: MVVM with Repository pattern
+min_ios_version: iOS 17
+package_manager: Swift Package Manager
+test_framework: XCTest
+lint_tools: SwiftLint, SwiftFormat
+network_layer_name: APIClient + RemoteRepository
+persistence_layer_name: LocalRepository
+logging_system: OSLog
+privacy_requirements: App Privacy disclosure and least-privilege data handling
+preferred_file_line_limit: 300
+healthkit_layer_name: HealthKitManager
+build_command: ""
+test_command: ""

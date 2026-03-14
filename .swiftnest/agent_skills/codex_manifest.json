@@ -1,0 +1,17 @@
+{
+  "agent" : "codex",
+  "installedDirectories" : [
+    "claude-code-bridge",
+    "ghostty-setup",
+    "ios-app-store-release",
+    "ios-multi-agent-dev",
+    "ios-swift-orchestrator",
+    "swift-master",
+    "swiftnest-concurrency-rules",
+    "swiftnest-ios-architecture",
+    "swiftnest-logging-rules",
+    "swiftnest-networking-rules",
+    "swiftnest-swiftui-rules",
+    "swiftnest-testing-rules"
+  ]
+}

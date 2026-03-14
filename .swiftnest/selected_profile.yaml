@@ -1,0 +1,17 @@
+name: advanced
+description: Strict setup for complex apps and long-lived codebases.
+description_ko: 복잡한 앱과 장기 운영 코드베이스에 맞춘 엄격한 구성입니다.
+default_skills:
+  - ios-architecture
+  - swiftui-rules
+  - concurrency-rules
+  - networking-rules
+  - testing-rules
+  - logging-rules
+flags:
+  strict_self_review: true
+  require_regression_tests: true
+  include_performance_guidance: true
+  include_security_privacy_emphasis: true
+  require_risk_summary: true
+  require_state_transition_thinking: true

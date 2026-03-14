@@ -1,0 +1,12 @@
+name: basic
+description: Minimal setup for solo projects and MVPs.
+description_ko: 개인 프로젝트와 MVP에 맞춘 최소 구성입니다.
+default_skills:
+  - ios-architecture
+  - swiftui-rules
+  - testing-rules
+flags:
+  strict_self_review: false
+  require_regression_tests: false
+  include_performance_guidance: false
+  include_security_privacy_emphasis: true
