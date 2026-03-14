@@ -70,27 +70,33 @@ struct MetricDetailView: View {
 
                 if !detail.coreUsages.isEmpty {
                     TrayCard {
-                        VStack(alignment: .leading, spacing: 8) {
-                            SectionHeader(title: "코어별 사용률", subtitle: "\(detail.coreUsages.count)개 코어")
+                        DisclosureGroup("코어별 사용률 (\(detail.coreUsages.count)개)") {
+                            LazyVGrid(columns: [
+                                GridItem(.flexible(), spacing: 8),
+                                GridItem(.flexible(), spacing: 8)
+                            ], spacing: 6) {
+                                ForEach(Array(detail.coreUsages.enumerated()), id: \.offset) { index, usage in
+                                    HStack(spacing: 4) {
+                                        Text("\(index)")
+                                            .font(.caption2.monospacedDigit())
+                                            .foregroundStyle(.secondary)
+                                            .frame(width: 16, alignment: .trailing)
 
-                            ForEach(Array(detail.coreUsages.enumerated()), id: \.offset) { index, usage in
-                                HStack(spacing: 8) {
-                                    Text("코어 \(index)")
-                                        .font(.caption.monospacedDigit())
-                                        .frame(width: 50, alignment: .leading)
+                                        Gauge(value: usage, in: 0...1) {
+                                            EmptyView()
+                                        }
+                                        .gaugeStyle(.accessoryLinear)
+                                        .tint(UsageTone(value: usage).color)
 
-                                    Gauge(value: usage, in: 0...1) {
-                                        EmptyView()
+                                        Text(usage.percentText)
+                                            .font(.caption2.monospacedDigit())
+                                            .frame(width: 32, alignment: .trailing)
                                     }
-                                    .gaugeStyle(.accessoryLinear)
-                                    .tint(UsageTone(value: usage).color)
-
-                                    Text(usage.percentText)
-                                        .font(.caption.monospacedDigit())
-                                        .frame(width: 36, alignment: .trailing)
                                 }
                             }
+                            .padding(.top, 4)
                         }
+                        .font(.caption)
                     }
                 }
             }
@@ -250,8 +256,18 @@ struct MetricDetailView: View {
             VStack(alignment: .leading, spacing: 10) {
                 SectionHeader(title: title, subtitle: "프로세스별 사용량 (상위 5개)")
 
-                if processes.isEmpty {
-                    Text("데이터 수집 중…")
+                if !processMonitor.isWarmedUp {
+                    HStack(spacing: 6) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("첫 번째 갱신 대기 중…")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 8)
+                } else if processes.isEmpty {
+                    Text("활성 프로세스 없음")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .center)

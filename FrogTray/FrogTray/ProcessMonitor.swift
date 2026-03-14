@@ -31,6 +31,7 @@ final class ProcessMonitor: ObservableObject {
     @Published private(set) var topCPUProcesses: [ProcessGroup] = []
     @Published private(set) var topMemoryProcesses: [ProcessGroup] = []
     @Published private(set) var topDiskIOProcesses: [ProcessGroup] = []
+    @Published private(set) var isWarmedUp = false
 
     private var previousCPUTimes: [pid_t: (user: UInt64, system: UInt64)] = [:]
     private var previousDiskIO: [pid_t: UInt64] = [:]
@@ -121,6 +122,10 @@ final class ProcessMonitor: ObservableObject {
         previousDiskIO = newDiskIO
         previousTimestamp = now
 
+        if elapsed > 0 {
+            isWarmedUp = true
+        }
+
         // Group by name
         let grouped = Dictionary(grouping: rawInfos, by: \.name)
 
@@ -138,7 +143,6 @@ final class ProcessMonitor: ObservableObject {
         topCPUProcesses = groups
             .sorted { $0.totalCPUUsage > $1.totalCPUUsage }
             .prefix(5)
-            .filter { $0.totalCPUUsage > 0 }
             .map { $0 }
 
         topMemoryProcesses = groups
