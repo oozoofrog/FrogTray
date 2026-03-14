@@ -43,9 +43,10 @@ usage() {
 FrogTray 릴리스 전체 파이프라인:
   1. 버전 범프 (MARKETING_VERSION + CURRENT_PROJECT_VERSION)
   2. Release 빌드 + DMG 생성
-  3. Git 커밋 + 태그 + 푸시
-  4. GitHub Release 생성 (DMG 첨부)
-  5. Homebrew Cask 업데이트 (커밋 + 푸시)
+  3. 로컬 설치 (기존 앱 종료 → ~/Applications 덮어쓰기 → 재실행)
+  4. Git 커밋 + 태그 + 푸시
+  5. GitHub Release 생성 (DMG 첨부)
+  6. Homebrew Cask 업데이트 (커밋 + 푸시)
 
 옵션:
   --dry-run       실제 실행 없이 단계별 미리보기
@@ -87,7 +88,7 @@ run() {
 
 # ─── 사전 검증 ────────────────────────────────────────────────
 
-step "[0/6] 사전 검증"
+step "[0/7] 사전 검증"
 
 command -v gh >/dev/null 2>&1 || err "gh (GitHub CLI)가 설치되어 있지 않습니다."
 command -v xcodebuild >/dev/null 2>&1 || err "xcodebuild를 찾을 수 없습니다."
@@ -141,7 +142,7 @@ fi
 
 # ─── 1. 버전 범프 ────────────────────────────────────────────
 
-step "[1/6] 버전 범프: ${CURRENT_VERSION} → ${NEW_VERSION} (build ${NEW_BUILD})"
+step "[1/7] 버전 범프: ${CURRENT_VERSION} → ${NEW_VERSION} (build ${NEW_BUILD})"
 
 if [[ ${DRY_RUN} -eq 0 ]]; then
   sed -i '' "s/MARKETING_VERSION = ${CURRENT_VERSION}/MARKETING_VERSION = ${NEW_VERSION}/g" "${PBXPROJ}"
@@ -154,7 +155,7 @@ fi
 
 # ─── 2. 빌드 + DMG 생성 ──────────────────────────────────────
 
-step "[2/6] Release 빌드"
+step "[2/7] Release 빌드"
 
 DERIVED_DATA="${REPO_ROOT}/.build/xcode"
 BUILT_APP="${DERIVED_DATA}/Build/Products/Release/${APP_NAME}.app"
@@ -172,7 +173,7 @@ if [[ ${DRY_RUN} -eq 0 ]]; then
   info "빌드 성공: ${BUILT_APP}"
 fi
 
-step "[3/6] DMG 생성: ${DMG_FILENAME}"
+step "[3/7] DMG 생성: ${DMG_FILENAME}"
 
 if [[ ${DRY_RUN} -eq 0 ]]; then
   DMG_STAGING="${REPO_ROOT}/.build/dmg-staging"
@@ -237,9 +238,51 @@ else
   info "[dry-run] DMG 생성 → ${DMG_PATH}"
 fi
 
-# ─── 4. Git 커밋 + 태그 + 푸시 ────────────────────────────────
+# ─── 4. 로컬 설치 ────────────────────────────────────────────
 
-step "[4/6] Git 커밋, 태그, 푸시"
+step "[4/7] 로컬 설치 (~/Applications)"
+
+INSTALL_DIR="${HOME}/Applications"
+INSTALLED_APP="${INSTALL_DIR}/${APP_NAME}.app"
+
+if [[ ${DRY_RUN} -eq 0 ]]; then
+  # 실행 중인 앱 종료
+  if pgrep -x "${APP_NAME}" >/dev/null 2>&1; then
+    info "실행 중인 ${APP_NAME} 종료"
+    pkill -x "${APP_NAME}" 2>/dev/null || true
+    sleep 1
+    # 종료 대기 (최대 5초)
+    for i in {1..5}; do
+      pgrep -x "${APP_NAME}" >/dev/null 2>&1 || break
+      sleep 1
+    done
+    # 그래도 살아있으면 강제 종료
+    if pgrep -x "${APP_NAME}" >/dev/null 2>&1; then
+      pkill -9 -x "${APP_NAME}" 2>/dev/null || true
+      sleep 1
+    fi
+  fi
+
+  # DMG 마운트 → 복사 → 언마운트
+  mkdir -p "${INSTALL_DIR}"
+  DMG_MOUNT=$(hdiutil attach "${DMG_PATH}" -nobrowse -noverify -noautoopen | grep "/Volumes/" | awk '{print $NF}')
+  rm -rf "${INSTALLED_APP}"
+  ditto "${DMG_MOUNT}/${APP_NAME}.app" "${INSTALLED_APP}"
+  hdiutil detach "${DMG_MOUNT}" -quiet
+  info "설치 완료: ${INSTALLED_APP}"
+
+  # 앱 실행
+  open "${INSTALLED_APP}"
+  info "앱 실행됨"
+else
+  info "[dry-run] pkill ${APP_NAME}"
+  info "[dry-run] ~/Applications/${APP_NAME}.app 덮어쓰기"
+  info "[dry-run] open ${INSTALLED_APP}"
+fi
+
+# ─── 5. Git 커밋 + 태그 + 푸시 ────────────────────────────────
+
+step "[5/7] Git 커밋, 태그, 푸시"
 
 if [[ ${DRY_RUN} -eq 0 ]]; then
   cd "${REPO_ROOT}"
@@ -257,7 +300,7 @@ fi
 
 # ─── 5. GitHub Release ───────────────────────────────────────
 
-step "[5/6] GitHub Release 생성"
+step "[6/7] GitHub Release 생성"
 
 RELEASE_NOTES=$(cd "${REPO_ROOT}" && git log --pretty=format:"- %s" "v${CURRENT_VERSION}..HEAD" 2>/dev/null | grep -v "Bump version" || echo "- 업데이트")
 
@@ -282,10 +325,10 @@ fi
 # ─── 6. Homebrew Cask 업데이트 ────────────────────────────────
 
 if [[ ${SKIP_BREW} -eq 1 ]]; then
-  step "[6/6] Homebrew Cask 업데이트 (건너뛰기)"
+  step "[7/7] Homebrew Cask 업데이트 (건너뛰기)"
   info "--skip-brew 옵션으로 건너뜀"
 else
-  step "[6/6] Homebrew Cask 업데이트"
+  step "[7/7] Homebrew Cask 업데이트"
 
   if [[ ! -d "${HOMEBREW_TAP}" ]]; then
     err "Homebrew tap을 찾을 수 없습니다: ${HOMEBREW_TAP}\n  HOMEBREW_TAP_PATH 환경변수를 설정하세요."
@@ -320,6 +363,7 @@ CASK
     cd "${HOMEBREW_TAP}"
     git add "${CASK_FILE}"
     git commit -m "Update FrogTray cask to ${NEW_VERSION}"
+    git pull --rebase origin main 2>/dev/null || true
     git push origin main
 
     info "Cask 업데이트 완료: ${CASK_FILE}"
