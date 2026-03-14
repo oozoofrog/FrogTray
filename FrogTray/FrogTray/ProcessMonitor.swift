@@ -171,6 +171,14 @@ final class ProcessMonitor: ObservableObject {
     }
 
     private func processName(for pid: pid_t) -> String {
+        // proc_name은 현재 사용자 프로세스만 반환하므로 proc_pidpath를 우선 사용
+        var pathBuffer = [CChar](repeating: 0, count: 4 * Int(MAXPATHLEN))
+        let pathLength = proc_pidpath(pid, &pathBuffer, UInt32(pathBuffer.count))
+        if pathLength > 0 {
+            let path = String(cString: pathBuffer)
+            return (path as NSString).lastPathComponent
+        }
+
         var nameBuffer = [CChar](repeating: 0, count: Int(MAXCOMLEN) + 1)
         let length = proc_name(pid, &nameBuffer, UInt32(nameBuffer.count))
         guard length > 0 else { return "" }
