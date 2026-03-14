@@ -8,6 +8,7 @@
 # Xcode and Swift build outputs
 DerivedData/
 .build/
+*.profraw
 
 # Xcode workspace metadata that can be regenerated
 **/*.xccheckout
