@@ -109,9 +109,6 @@ struct MenuBarHostingBridge: NSViewRepresentable {
 
             let menu = contextMenuBuilder.buildMenu()
 
-            // Temporarily assign the menu to the status item so NSStatusBarButton
-            // presents it on the next performClick. Clear it afterward so that
-            // subsequent left-clicks still open the SwiftUI popover window.
             if let statusItem = button.statusItem {
                 statusItem.menu = menu
                 button.performClick(nil)
@@ -200,9 +197,6 @@ final class BridgeAnchorView: NSView {
 
 private extension NSStatusBarButton {
     var statusItem: NSStatusItem? {
-        // Access the status item via KVC on NSStatusBarWindow (private API).
-        // Guard with responds(to:) to avoid NSUnknownKeyException if the
-        // internal key is removed in a future macOS release.
         guard let window = self.window else { return nil }
         let selector = NSSelectorFromString("statusItem")
         guard window.responds(to: selector) else {
