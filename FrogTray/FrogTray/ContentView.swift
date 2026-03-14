@@ -110,6 +110,9 @@ struct ContentView: View {
                     value: monitor.snapshot.cpuUsage,
                     iconName: "cpu",
                     tone: UsageTone(value: monitor.snapshot.cpuUsage),
+                    topProcess: topProcessText(processMonitor.topCPUProcesses.first) {
+                        String(format: "%.1f%%", $0.totalCPUUsage)
+                    },
                     showChevron: true
                 )
             }
@@ -125,6 +128,9 @@ struct ContentView: View {
                     value: monitor.snapshot.memoryUsage,
                     iconName: "memorychip",
                     tone: UsageTone(value: monitor.snapshot.memoryUsage),
+                    topProcess: topProcessText(processMonitor.topMemoryProcesses.first) {
+                        ByteCountFormatter.string(fromByteCount: Int64($0.totalMemoryBytes), countStyle: .memory)
+                    },
                     showChevron: true
                 )
             }
@@ -140,6 +146,9 @@ struct ContentView: View {
                     value: monitor.snapshot.diskUsage,
                     iconName: "internaldrive",
                     tone: UsageTone(value: monitor.snapshot.diskUsage),
+                    topProcess: topProcessText(processMonitor.topDiskIOProcesses.first) {
+                        ByteCountFormatter.string(fromByteCount: Int64($0.totalDiskIOBytes), countStyle: .memory)
+                    },
                     showChevron: true
                 )
             }
@@ -240,6 +249,11 @@ struct ContentView: View {
         }
     }
 
+    private func topProcessText(_ process: ProcessGroup?, formatter: (ProcessGroup) -> String) -> String? {
+        guard let p = process else { return nil }
+        return "\(p.displayName) · \(formatter(p))"
+    }
+
     private var actionRow: some View {
         HStack(spacing: 10) {
             Button {
@@ -277,6 +291,7 @@ struct MetricCard: View {
     let value: Double
     let iconName: String
     let tone: UsageTone
+    var topProcess: String? = nil
     var showChevron: Bool = false
 
     var body: some View {
@@ -328,6 +343,19 @@ struct MetricCard: View {
                 }
                 .gaugeStyle(.accessoryLinear)
                 .tint(tone.color)
+
+                if let topProcess {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.caption2)
+                            .foregroundStyle(tone.color)
+                        Text("1위  \(topProcess)")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
 
                 Text(details)
                     .font(.caption)
