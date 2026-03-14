@@ -2,7 +2,7 @@
 //  MetricsHistory.swift
 //  FrogTray
 //
-//  Circular buffer storing the last 3 metric readings for the history bar graph.
+//  Bounded queue storing the last 3 metric readings for the history bar graph.
 //
 
 import Foundation
@@ -14,11 +14,16 @@ struct MetricsHistory: Sendable {
         let disk: Double
     }
 
-    private(set) var readings: [Reading] = []
+    private var readings: [Reading] = []
     private let capacity = 3
 
     mutating func push(cpu: Double, memory: Double, disk: Double) {
-        readings.append(Reading(cpu: cpu, memory: memory, disk: disk))
+        let clamped = Reading(
+            cpu: min(max(cpu, 0), 1),
+            memory: min(max(memory, 0), 1),
+            disk: min(max(disk, 0), 1)
+        )
+        readings.append(clamped)
         if readings.count > capacity {
             readings.removeFirst()
         }

@@ -68,17 +68,21 @@ struct MenuBarCharacterView: View {
         }
 
         blinkTask = Task {
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(Double.random(in: 4...6)))
-                guard !Task.isCancelled else { break }
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    isBlinking = true
+            do {
+                while !Task.isCancelled {
+                    try await Task.sleep(for: .seconds(Double.random(in: 4...6)))
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        isBlinking = true
+                    }
+                    try await Task.sleep(for: .milliseconds(150))
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        isBlinking = false
+                    }
                 }
-                try? await Task.sleep(for: .milliseconds(150))
-                guard !Task.isCancelled else { break }
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    isBlinking = false
-                }
+            } catch is CancellationError {
+                // Expected when stopAnimations() cancels the task
+            } catch {
+                // Unexpected error; stop blinking gracefully
             }
         }
     }

@@ -8,7 +8,10 @@
 //
 
 import AppKit
+import os
 import SwiftUI
+
+private let logger = Logger(subsystem: "com.oozoofrog.FrogTray", category: "MenuBarHostingBridge")
 
 struct MenuBarHostingBridge: NSViewRepresentable {
     @ObservedObject var monitor: SystemMetricsMonitor
@@ -46,6 +49,7 @@ struct MenuBarHostingBridge: NSViewRepresentable {
         var popover: NSPopover?
         var contextMenuBuilder: MenuBarContextMenu?
         var isHovering = false
+        private var hoverTimer: Timer?
 
         init(
             monitor: SystemMetricsMonitor,
@@ -85,11 +89,17 @@ struct MenuBarHostingBridge: NSViewRepresentable {
 
         @objc func mouseEntered(with event: NSEvent) {
             isHovering = true
-            showTooltipPopover()
+            hoverTimer?.invalidate()
+            hoverTimer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: false) { [weak self] _ in
+                guard let self, self.isHovering else { return }
+                self.showTooltipPopover()
+            }
         }
 
         @objc func mouseExited(with event: NSEvent) {
             isHovering = false
+            hoverTimer?.invalidate()
+            hoverTimer = nil
             dismissTooltipPopover()
         }
 
@@ -99,12 +109,12 @@ struct MenuBarHostingBridge: NSViewRepresentable {
 
             let menu = contextMenuBuilder.buildMenu()
 
-            // Standard pattern: temporarily set the menu, then remove it
-            // so left-click still opens the SwiftUI window
+            // Temporarily assign the menu to the status item so NSStatusBarButton
+            // presents it on the next performClick. Clear it afterward so that
+            // subsequent left-clicks still open the SwiftUI popover window.
             if let statusItem = button.statusItem {
                 statusItem.menu = menu
                 button.performClick(nil)
-                // Remove menu after it closes so left-click works again
                 DispatchQueue.main.async {
                     statusItem.menu = nil
                 }
@@ -155,11 +165,14 @@ final class BridgeAnchorView: NSView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        guard window != nil else { return }
         guard !didSetup else { return }
 
         if let button = findStatusBarButton() {
             coordinator?.setupOnButton(button)
             didSetup = true
+        } else {
+            logger.warning("findStatusBarButton() failed — NSStatusBarButton ancestor not found")
         }
     }
 
@@ -175,7 +188,11 @@ final class BridgeAnchorView: NSView {
     }
 
     override func rightMouseDown(with event: NSEvent) {
-        coordinator?.showRightClickMenu()
+        guard let coordinator else {
+            super.rightMouseDown(with: event)
+            return
+        }
+        coordinator.showRightClickMenu()
     }
 }
 
@@ -183,9 +200,15 @@ final class BridgeAnchorView: NSView {
 
 private extension NSStatusBarButton {
     var statusItem: NSStatusItem? {
-        // Walk up the responder chain to find the status item
-        // The button's window is NSStatusBarWindow, which has a reference
+        // Access the status item via KVC on NSStatusBarWindow (private API).
+        // Guard with responds(to:) to avoid NSUnknownKeyException if the
+        // internal key is removed in a future macOS release.
         guard let window = self.window else { return nil }
+        let selector = NSSelectorFromString("statusItem")
+        guard window.responds(to: selector) else {
+            logger.warning("NSStatusBarWindow no longer responds to 'statusItem' KVC key")
+            return nil
+        }
         return window.value(forKey: "statusItem") as? NSStatusItem
     }
 }

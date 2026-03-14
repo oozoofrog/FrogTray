@@ -7,9 +7,14 @@ macOS 메뉴바 시스템 모니터 앱. "개구리 연못" 테마.
 ```
 🐸 개구리네 (FrogTrayApp)
 │
-├── 이마 (FrogMenuBarLabel) — 메뉴바에 항상 보이는 부분
-│   ├── 눈깔 (FrogStatusIcon) — 개구리 아이콘
-│   └── 이마글씨 — C/M/D 수치 텍스트
+├── 이마 (MenuBarLabelView) — 메뉴바에 항상 보이는 부분
+│   ├── 눈깔 (MenuBarCharacterView) — 개구리 캐릭터 (SF Symbol 애니메이션)
+│   ├── 이마글씨 — C/M/D 수치 텍스트
+│   └── 이마막대 (MenuBarHistoryBarsView) — 히스토리 막대 그래프
+│
+├── 다리 (MenuBarHostingBridge) — AppKit 브릿지 (호버/우클릭/팝오버)
+│   ├── 말풍선 (MenuBarTooltipView) — 호버 시 팝오버 툴팁
+│   └── 메뉴판 (MenuBarContextMenu) — 우클릭 컨텍스트 메뉴
 │
 └── 배 (ContentView) — 클릭 시 열리는 트레이 윈도우
     │
