@@ -328,7 +328,7 @@ struct MetricDetailView: View {
     // MARK: - Formatters
 
     private func formatBytes(_ bytes: UInt64) -> String {
-        ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .memory)
+        ByteCountFormatter.string(fromByteCount: Int64(clamping: bytes), countStyle: .memory)
     }
 
     private func formatDiskBytes(_ bytes: Int64) -> String {

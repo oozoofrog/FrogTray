@@ -127,7 +127,7 @@ struct ContentView: View {
                     iconName: "memorychip",
                     tone: UsageTone(value: monitor.snapshot.memoryUsage),
                     topProcess: topProcessText(processMonitor.topMemoryProcesses.first) {
-                        ByteCountFormatter.string(fromByteCount: Int64($0.totalMemoryBytes), countStyle: .memory)
+                        ByteCountFormatter.string(fromByteCount: Int64(clamping: $0.totalMemoryBytes), countStyle: .memory)
                     },
                     showChevron: true
                 )
@@ -145,7 +145,7 @@ struct ContentView: View {
                     iconName: "internaldrive",
                     tone: UsageTone(value: monitor.snapshot.diskUsage),
                     topProcess: topProcessText(processMonitor.topDiskIOProcesses.first) {
-                        ByteCountFormatter.string(fromByteCount: Int64($0.totalDiskIOBytes), countStyle: .memory)
+                        ByteCountFormatter.string(fromByteCount: Int64(clamping: $0.totalDiskIOBytes), countStyle: .memory)
                     },
                     showChevron: true
                 )

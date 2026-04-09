@@ -85,9 +85,10 @@ final class ProcessMonitor: ObservableObject {
             newCPUTimes[pid] = (user: userTime, system: systemTime)
 
             var cpuUsage = 0.0
-            if elapsed > 0, let prev = previousCPUTimes[pid] {
-                let userDelta = Double(userTime &- prev.user)
-                let systemDelta = Double(systemTime &- prev.system)
+            if elapsed > 0, let prev = previousCPUTimes[pid],
+               userTime >= prev.user, systemTime >= prev.system {
+                let userDelta = Double(userTime - prev.user)
+                let systemDelta = Double(systemTime - prev.system)
                 // Mach time is in nanoseconds
                 let totalCPUNs = userDelta + systemDelta
                 let elapsedNs = elapsed * 1_000_000_000
@@ -104,8 +105,8 @@ final class ProcessMonitor: ObservableObject {
             if rusageRet == 0 {
                 let totalIO = rusage.ri_diskio_bytesread + rusage.ri_diskio_byteswritten
                 newDiskIO[pid] = totalIO
-                if let prevIO = previousDiskIO[pid] {
-                    diskIOBytes = totalIO &- prevIO
+                if let prevIO = previousDiskIO[pid], totalIO >= prevIO {
+                    diskIOBytes = totalIO - prevIO
                 }
             }
 
